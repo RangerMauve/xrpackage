@@ -179,9 +179,16 @@ const _makeTargetMesh = () => {
 const velocity = new THREE.Vector3();
 const lastGrabs = [false, false];
 const lastAxes = [[0, 0], [0, 0]];
+let lastTimestamp = performance.now();
 function animate(timestamp, frame) {
+  if (timestamp === undefined) {
+    debugger;
+  }
   /* const timeFactor = 1000;
   targetMesh.material.uniforms.uTime.value = (Date.now() % timeFactor) / timeFactor; */
+  
+  const timeDiff = (timestamp - lastTimestamp) / 1000;
+  lastTimestamp = timestamp;
 
   const currentSession = getSession();
   if (currentSession) {
@@ -253,7 +260,7 @@ function animate(timestamp, frame) {
     
     pe.setRigMatrix(null);
   } else if (document.pointerLockElement) {
-    const speed = 0.015 * (keys.shift ? 3 : 1);
+    const speed = 30 * (keys.shift ? 3 : 1);
     const cameraEuler = pe.camera.rotation.clone();
     cameraEuler.x = 0;
     cameraEuler.z = 0;
@@ -273,10 +280,18 @@ function animate(timestamp, frame) {
     if (localVector.length() > 0) {
       localVector.normalize().multiplyScalar(speed);
     }
+    localVector.y -= 9.8;
+    localVector.multiplyScalar(timeDiff);
     velocity.add(localVector);
-    pe.camera.position.add(velocity);
+    pe.camera.position.add(localVector2.copy(velocity).multiplyScalar(timeDiff));
+    if (pe.camera.position.y <= avatarHeight) {
+      pe.camera.position.y = avatarHeight;
+      velocity.y = 0;
+      jumpState = null;
+    }
+    localVector.set(-velocity.x, 0, -velocity.z).multiplyScalar(15 * timeDiff);
+    velocity.add(localVector);
     pe.camera.updateMatrixWorld();
-    velocity.multiplyScalar(0.7);
 
     if (selectedTool === 'thirdperson') {
       pe.camera.matrixWorld.decompose(localVector, localQuaternion, localVector2);
@@ -462,12 +477,14 @@ const keys = {
   right: false,
   shift: false,
 };
+let jumpState = null;
 const _resetKeys = () => {
   for (const k in keys) {
     keys[k] = false;
   }
 };
 window.addEventListener('keydown', e => {
+  console.log('key down', e.which);
   switch (e.which) {
     case 49: // 1
     case 50:
@@ -537,6 +554,19 @@ window.addEventListener('keydown', e => {
     case 16: { // shift
       if (document.pointerLockElement) {
         keys.shift = true;
+      }
+      break;
+    }
+    case 32: { // space
+      console.log('got space', !!document.pointerLockElement);
+      if (document.pointerLockElement) {
+        if (!jumpState) {
+          jumpState = {
+            air: true,
+          };
+          velocity.y += 5;
+          console.log('got velocity', velocity.toArray().join(','));
+        }
       }
       break;
     }
